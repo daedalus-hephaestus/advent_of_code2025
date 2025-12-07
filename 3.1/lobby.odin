@@ -41,10 +41,21 @@ main :: proc() {
 	input := string(data)
 
 	for line in strings.split_lines_iterator(&input) {
-		highest1, index1 := find_highest_n(line, 0, len(line) - 1)
-		highest2, _ := find_highest_n(line, index1 + 1, len(line))
-		fmt.printfln("%v + %v", highest1, highest2) 
+		num := calc_bank(line)
+		fmt.println(num)
 	}
+}
+
+calc_bank :: proc(str: string) -> int {
+	highest1, index1 := find_highest_n(str, 0, len(str) - 1)
+	highest2, _ := find_highest_n(str, index1 + 1, len(str))
+
+	str := fmt.aprintf("%v%v", highest1, highest2)
+	defer delete(str)
+
+	res, ok := strconv.parse_int(str)
+	if !
+
 }
 
 find_highest_n :: proc(str: string, start, end: int) -> ( highest, index: int ) {
