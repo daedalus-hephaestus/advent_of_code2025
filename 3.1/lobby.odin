@@ -6,7 +6,7 @@ import "core:os/os2"
 import "core:strconv"
 import "core:strings"
 
-file :: "test_input"
+file :: "input"
 joltage : int
 
 main :: proc() {
@@ -42,8 +42,10 @@ main :: proc() {
 
 	for line in strings.split_lines_iterator(&input) {
 		num := calc_bank(line)
-		fmt.println(num)
+		joltage += num
 	}
+
+	fmt.println(joltage)
 }
 
 calc_bank :: proc(str: string) -> int {
@@ -54,8 +56,12 @@ calc_bank :: proc(str: string) -> int {
 	defer delete(str)
 
 	res, ok := strconv.parse_int(str)
-	if !
+	if !ok {
+		fmt.eprintln("error converting string to int")
+		os2.exit(3)
+	}	
 
+	return res
 }
 
 find_highest_n :: proc(str: string, start, end: int) -> ( highest, index: int ) {
