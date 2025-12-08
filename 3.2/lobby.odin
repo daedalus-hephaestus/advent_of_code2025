@@ -5,8 +5,9 @@ import "core:mem"
 import "core:os/os2"
 import "core:strconv"
 import "core:strings"
+import "base:intrinsics"
 
-file :: "test_input"
+file :: "input"
 joltage : int
 
 main :: proc() {
@@ -49,45 +50,41 @@ main :: proc() {
 }
 
 calc_bank_new :: proc(str: string) -> int {
-	nums : [12]int
-	j := 0
+	res := strings.clone(str)
 
-	for i := 12; i > 0; i -= 1 {
-		highest, index := find_highest_n(str, 0, len(str) - i)
-		nums[j] = highest
-		j += 1
+	remove := len(res) - 12
+
+	for i in 0..<remove { 
+		res = remove_lowest(res)
 	}
 
-	fmt.println(nums)
+	defer delete(res)
 
-	return 0
-}
-
-calc_bank_old :: proc(str: string) -> int {
-	highest1, index1 := find_highest_n(str, 0, len(str) - 1)
-	highest2, _ := find_highest_n(str, index1 + 1, len(str))
-
-	str := fmt.aprintf("%v%v", highest1, highest2)
-	defer delete(str)
-
-	res, ok := strconv.parse_int(str)
+	num, ok := strconv.parse_int(res)
 	if !ok {
-		fmt.eprintln("error converting string to int")
-		os2.exit(3)
-	}	
+		fmt.eprintln("unable to convert string to int")
+		os2.exit(2)
+	}
 
-	return res
+	return num
 }
 
-find_highest_n :: proc(str: string, start, end: int) -> ( highest, index: int ) {
-	for i in start..<end {
+remove_lowest :: proc(str: string) -> string {
+	lowest := int(str[0] - 48)
+	index := 0
+	for i in 0..<len(str) {
 		num := int(str[i] - 48)
 		if num < 0 do os2.exit(2)
-		if num > highest {
-			highest = num
+		if num < lowest {
+			lowest = num
 			index = i
+		} else if num > lowest {
+			break
 		}
 	}
+	beg := str[:index]
+	end := str[index + 1:]
 
-	return
+	defer delete(str)
+	return strings.concatenate({string(beg), string(end)})
 }
