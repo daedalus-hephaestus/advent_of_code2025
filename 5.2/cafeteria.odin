@@ -3,7 +3,7 @@ package cafeteria
 import "base:intrinsics"
 import "core:fmt"
 import "core:mem"
-import "core:os/os2"
+import "core:os"
 import "core:strconv"
 import "core:strings"
 
@@ -13,9 +13,12 @@ MODE :: enum {
 	RANGE,
 	ID,
 }
+Range :: struct {
+	l: int,
+	u: int
+}
+ranges: [dynamic]Range
 
-ranges: [dynamic][2]int
-range_map: map[int]bool
 total := 0
 
 main :: proc() {
@@ -39,12 +42,12 @@ main :: proc() {
 		}
 	}
 
-	data, err := os2.read_entire_file_from_path(file, context.allocator)
+	data, err := os.read_entire_file_from_path(file, context.allocator)
 	defer delete(data)
 
 	if err != .NONE {
 		fmt.eprintln(err)
-		os2.exit(1)
+		os.exit(1)
 	}
 
 	input := string(data)
@@ -59,74 +62,136 @@ main :: proc() {
 
 		switch mode {
 		case .RANGE:
-			l, u := get_range(line)
+			range := get_range(line)
 
-			for &r in ranges {
-				if l > r.x && u < r.y do continue outer
-				if l > r.x && l < r.y && u > r.y {
-					l = r.y + 1
-				}
-				if u > r.x && u < r.y && l < r.x {
-					u = r.x - 1
-				}
+
+			fmt.printfln("Found range: %v", range)
+			mod, add, _ := update_ranges(range, &ranges)
+			if add {
+				append(&ranges, mod)
 			}
-			append(&ranges, [2]int{l, u})
 		case .ID:
 			break
 		}
 	}
 
-	for &r in ranges {
-		if r.y - r.x + 1 < 0 do fmt.println("negative found")
-		check_range(&r)
-		check_range(&r)
-		check_range(&r)
-		total += r.y - r.x + 1
+	changes_made := true
+	for changes_made {
+		changes_made = false
+		for r in ranges {
+			_, add, change := update_ranges(r, &ranges)
+			if change == true do changes_made = true
+		}
 	}
 
-	fmt.println(total)
+	total = count_ranges(ranges[:])
+	fmt.printfln("TOTAL: %v", total)
 
 	delete(ranges)
-	delete(range_map)
 }
 
-get_range :: proc(range: string) -> (lower, upper: int) {
-	res, _ := strings.replace(range, "\n", "", 1, context.temp_allocator)
+get_range :: proc(str: string) -> (range: Range) {
+	res, _ := strings.replace(str, "\n", "", 1, context.temp_allocator)
 	parts := strings.split(res, "-", context.temp_allocator)
 
-	ok: bool
-	lower, ok = strconv.parse_int(parts[0])
-	if !ok {
+	lower, lower_ok := strconv.parse_int(parts[0])
+	if !lower_ok {
 		fmt.eprintln("error converting string to number")
-		os2.exit(2)
+		os.exit(2)
 	}
 
-	upper, ok = strconv.parse_int(parts[1])
-	if !ok {
+	upper, upper_ok := strconv.parse_int(parts[1])
+	if !upper_ok {
 		fmt.eprintln("error converting string to number")
-		os2.exit(2)
+		os.exit(2)
 	}
 
 	free_all(context.temp_allocator)
+
+	range = {
+		l = lower,
+		u = upper
+	}
 	return
 }
 
-check_range :: proc(range: ^[2]int) {
-	for r in ranges {
-		if range.x > r.x && range.y < r.y {
-			fmt.printfln("%v contained by %v", range, r)
-			range^ = {0, 0}
-			break
+update_ranges :: proc(range: Range, ranges: ^[dynamic]Range) -> (mod: Range, add: bool, change: bool) {
+	mod = range
+	add = true
+	change = false
+
+	lower_contained, upper_contained: bool
+	lower_index, upper_index: int
+
+	for r, i in ranges {
+		if range.l == r.l && range.u == r.u {
+			add = false
+			continue
 		}
-		if range.x > r.x && range.x < r.y && range.y > r.y {
-			fmt.printfln("lower of %v contained by %v", range, r)
-			range.x = r.y + 1
-			break
+
+		// if the lower is contained by the range
+		if range.l >= r.l && range.l <= r.u {
+			lower_contained = true
+			lower_index = i
 		}
-		if range.y > r.x && range.y < r.y && range.x < r.x {
-			fmt.printfln("upper of %v contained by %v", range, r)
-			range.y = r.x - 1
-			break
+
+		// if the upper is contained by the range
+		if range.u >= r.l && range.u <= r.u {
+			upper_contained = true
+			upper_index = i
+		}
+
+		if (range.u > r.u && range.l < r.l) {
+			fmt.printfln("%v larger than %v", range, r)
+			add = false
+			change = true
+			ranges[i].l = range.l
+			ranges[i].u = range.u
+			return
 		}
 	}
+
+	if lower_contained && upper_contained {
+
+		if lower_index == upper_index {
+			fmt.printfln("%v Completely contained: skipping", range)
+			add = false
+			change = false
+			return
+		}
+
+		fmt.printfln("Full overlap on %v\nMerging %v and %v", range, ranges[lower_index], ranges[upper_index])
+		ranges[lower_index].u = ranges[upper_index].u
+		ordered_remove(ranges, upper_index)
+		add = false
+		change = true
+		return
+	}
+
+	if lower_contained {
+		fmt.printfln("Lower overlap on %v\nModifying %v", range, ranges[lower_index])
+		ranges[lower_index].u = range.u
+		add = false
+		change = true
+		return
+	}
+
+	if upper_contained {
+		fmt.printfln("Upper overlap on %v\nModifying %v", range, ranges[upper_index])
+		ranges[upper_index].l = range.l
+		add = false
+		change = true
+		return
+	}
+
+	return
+}
+
+count_ranges :: proc(ranges: []Range) -> (count: int) {
+	for r in ranges {
+		diff := r.u - r.l + 1
+		count += diff
+		fmt.printfln("%v -> %v", r, diff)
+	}
+	return
 }
